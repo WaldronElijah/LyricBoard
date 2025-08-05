@@ -1,0 +1,117 @@
+// This is your Prisma schema file
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Ensure this is needed and configured
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  hashedPassword String?   // ADD THIS if not already there and using credentials auth
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  boards        Board[]
+  // notes      Note[] // Consider if this top-level relation is needed or if notes are always via Lyric
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId]) // Good practice for NextAuth lookups
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId]) // Good practice for NextAuth lookups
+}
+
+// Add this model if you are using email verification with NextAuth.js
+// model VerificationToken {
+//   identifier String
+//   token      String   @unique
+//   expires    DateTime
+//   @@unique([identifier, token])
+// }
+
+model Board {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lyrics      Lyric[] // Renamed from PinnedItem in my previous example, consistent with your model
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Lyric { // This corresponds to your PinnedItem on the frontend
+  id          String  @id @default(cuid())
+  content     String  @db.Text // Good for longer text
+  songTitle   String
+  artist      String
+  spotifyId   String?
+
+  // Fields for react-rnd position and size
+  x           Float
+  y           Float
+  width       Float
+  height      Float
+
+  fontSize    Int?     // Or Float? if you need more precision. Int is likely fine for pixel values.
+                       // Make it optional (?) so existing lyrics don't break
+                       // and you can have a default on the frontend.
+
+  boardId     String
+  board       Board   @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  notes       Note[]
+  // position    Int?    // Keep if you have another ordering system, otherwise x/y might be enough. Make optional?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([boardId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  content   String   @db.Text // Good for longer text
+  lyricId   String
+  lyric     Lyric    @relation(fields: [lyricId], references: [id], onDelete: Cascade)
+  // userId    String // This userId field might be redundant if ownership is via Lyric -> Board -> User
+  // user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lyricId])
+}
